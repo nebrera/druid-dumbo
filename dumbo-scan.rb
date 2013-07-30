@@ -1,7 +1,6 @@
 #!/usr/bin/env ruby
 require 'json'
 require './lib/hdfs_scanner.rb'
-require './lib/mysql_scanner.rb'
 
 base_dir = File.dirname(__FILE__)
 

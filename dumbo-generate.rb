@@ -3,9 +3,20 @@ require 'set'
 require 'json'
 require 'erb'
 require './lib/hdfs_scanner.rb'
-require './lib/mysql_scanner.rb'
+require "getopt/std"
+
+opt = Getopt::Std.getopts("po:")
+
+if opt["p"]
+  require './lib/psql_scanner.rb'
+else
+  require './lib/mysql_scanner.rb'
+end
 
 base_dir = File.dirname(__FILE__)
+
+output_file = opt["o"]
+output_file = base_dir + "/" + "druidimport.conf" if output_file.nil?
 
 state_file_name = File.join(base_dir, 'hadoop_state.json')
 template_file = File.join(base_dir, 'importer.template')
@@ -40,13 +51,18 @@ s3_bucket = ENV['DRUID_S3_BUCKET']
 s3_prefix = ENV['DRUID_S3_PREFIX']
 s3_prefix = s3_prefix[1..-1] if s3_prefix[0] == '/' # Postel's law
 
-segment_output_path = "s3n://#{s3_bucket}/#{s3_prefix}"
+#segment_output_path = "s3n://#{s3_bucket}/#{s3_prefix}"
+segment_output_path = "s3://#{s3_bucket}/#{s3_prefix}"
 
-mysql = Druid::MysqlScanner.new :data_source => data_source
+if opt["p"]
+  db = Druid::PsqlScanner.new :data_source => data_source
+else
+  db = Druid::MysqlScanner.new :data_source => data_source
+end
 
-mysql.scan.each do |mysql_segment|
-  start = mysql_segment['start']
-  segments[start] = mysql_segment if segments.include? start
+db.scan.each do |db_segment|
+  start = db_segment['start']
+  segments[start] = db_segment if segments.include? start
 end
 
 rescan_hours = Set.new
@@ -74,9 +90,9 @@ intervals = rescan_hours.map do |time|
 end
 files = rescan_files.to_a
 
-puts 'Writing druidimport.conf for batch ingestion'
+puts "Writing #{output_file} for batch ingestion"
 
-IO.write(File.join(base_dir, 'druidimport.conf'), template.result(binding))
+IO.write(output_file, template.result(binding))
 
 if rescan_files.empty?
   puts 'Nothing to scan, will exit 1 now.'
